@@ -21,12 +21,13 @@ class MDP(object):
 class Grid(MDP):
 	self.action_set = set(['u','d','l','r'])
 
-	def __init__(self, state=(0,0), h=10, w=10):
+	def __init__(self, h=10, w=10, state=(0,0)):
 		self.h = int(h)
 		self.w  = int(w)
 		self.state = state
 		x, y = self.state
 		assert x >=0 and x < self.h and y >= 0 and y < self.w, 'State is out of allowed range: x = %i y = %i' % self.state
+		self.borders = [self.w*[None], self.h*[None], self.w*[None], self.h*[None]] # N, E, S, W border
 
 	def act(self, action):
 		if action in self.action_set:
@@ -56,7 +57,28 @@ class Grid(MDP):
 				else:
 					return -10
 		else:
-			raise Error('Action not in allowed set') 		
+			raise Error('Action not in allowed set') 
+
+	@staticmethod
+	def one_way(grid1, grid2, border1, border2):
+		i, j = border1
+		p, q = border2
+		if p is 0:
+			state = 0, q
+		elif p is 1:
+			state = q, grid2.w-1
+		elif p is 2:
+			state = grid2.h-1, q
+		elif p is 3:
+			state = q, 0
+		else:
+			raise Error('Improper coordinates')
+		grid1.borders[i][j] = (grid2, state)
+
+	@staticmethod
+	def join(grid1, grid2, border1, border2):
+		one_way(grid1, grid2, border1, border2)
+		one_way(grid2, grid1, border2, border1)
 
 class GridWorld(MDP):
 	''' Grid world environment, made up of list of Grid objects, as well as a list of borders, 
@@ -66,17 +88,10 @@ class GridWorld(MDP):
 	self.action_set = set(['u','d','l','r'])
 	self.dir_to_idx = {'u':0, 'r':1, 'd':2, 'l':3} # map direction to index of 'borders' tuple corresponding to that border
 
-	def __init__(self, state=(0,0,0), grids=[Grid()], borders=None):
+	def __init__(self, grids=[Grid()], state=(0,0,0)):
 		idx, x, y = self.state
 		self.state = grids[idx], x, y
 		self.grids = grids
-		if borders is None:
-			for grid in self.grids
-				grid.borders = (grid.w*[None], grid.h*[None], grid.w*[None], grid.h*[None]) # N, E, W, S border
-		else:
-			assert len(self.grids) == len(borders), 'Borders and grids must be one-to-one'
-			for i in range(len(self.grids)):
-				self.grids[i].borders = borders[i]
 
 	def act(self, action):
 		if action in self.action_set:
@@ -100,17 +115,14 @@ class TwoRooms(GridWorld):
 	''' A gridworld consisting of two rooms, each of the same height and width
 	    with a door connecting them at half the height of the room. '''
 
-	def __init__(self, state=(0,0), h=10, w=10):
-		x, y = state
-		left  = Grid((x,y), h, w)
-		right = Grid((0,0), h, w)
-		link  = Grid((0,0), 1, 1)
-		leftborder  = [w*[None], h*[None], w*[None], h*[None]]
-		leftborder[1][h/2] = (link,(0,0))
-		rightborder = [w*[None], h*[None], w*[None], h*[None]]
-		rightborder[3][h/2] = (link,(0,0))
-		linkborder  = ([None], [(right,(h/2,0))], [None], [(left,(h/2,w-1))])
-		GridWorld.__init__(self, (0,x,y), [left, right, link], [tuple(leftborder), tuple(rightborder), tuple(link)])
+	def __init__(self, h=10, w=10, state=(0,0)):
+		left  = Grid(h, w, state)
+		right = Grid(h, w)
+		link  = Grid(1, 1)
+		left.borders[1][h/2] = (link,(0,0))
+		right.borders[3][h/2] = (link,(0,0))
+		link.borders = [[None], [(right,(h/2,0))], [None], [(left,(h/2,w-1))]]
+		GridWorld.__init__(self, [left, right, link])
 
 class Taxi(MDP):
 	# Actions:
@@ -122,11 +134,47 @@ class Taxi(MDP):
 	# q - drop off (quit?)
 	self.action_set = set(['u','d','l','r','p','q'])
 
-	def __init__(self, state, goal):
-		
+	def __init__(self, goal=(1,0,2), state=(0,0,0,5,1,1,0)):
+		grids = [Grid(2, 2), Grid(2, 3), Grid(1, 5), Grid(2, 1), Grid(2, 2), Grid(2, 2)]
+		join(grids[2],grids[0],(0,0),(2,0))
+		join(grids[2],grids[0],(0,1),(2,1))
+		join(grids[2],grids[1],(0,2),(2,0))
+		join(grids[2],grids[1],(0,3),(2,1))
+		join(grids[2],grids[1],(0,4),(2,2))
+		join(grids[2],grids[3],(2,0),(0,0))
+		join(grids[2],grids[4],(2,1),(0,0))
+		join(grids[2],grids[4],(2,2),(0,1))
+		join(grids[2],grids[5],(2,3),(0,0))
+		join(grids[2],grids[5],(2,4),(0,1))
+		self.world = GridWorld(grids)
+		self.goal = goal
+		tg, tx, ty, pg, px, py, inCab = state
+		self.state = self.world.grids[tg], tx, ty, self.world.grids[pg], px, py, inCab
 
 	def act(self,action):
-
+		if action in self.action_set:
+			tg, tx, ty, pg, px, py, inCab = self.state # state is tuple consisting of grid, x, and y position of taxi and person, 
+													   # and a binary variable for whether the person is in the cab or not
+			if action in self.world.action_set:
+				r = self.world.act(action)
+				tg, tx, ty = self.world.state()
+				if inCab:
+					self.state = tg, tx, ty, tg, tx, ty, inCab
+				else:
+					self.state = tg, tx, ty, pg, px, py, inCab
+				return r
+			elif action is 'p':
+				if tg is pg and tx is px and ty is py:
+					self.state = tg, tx, ty, tg, tx, ty, 1
+			elif action is 'q':
+				if inCab is 1:
+					self.state = tg, tx, ty, pg, px, py, 0
+					gg, gx, gy = self.goal
+					if gg = pg and gx = px and gy = py:
+						return 1000 # Achieve the goal of dropping off the passenger
+			return -1
+		else:
+			raise Error('Not a recognized action')
 
 class Hanoi(MDP):
 	pass
