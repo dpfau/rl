@@ -1,8 +1,11 @@
 
 import random
 import itertools
+import collections
 
 def wrandom(weights):
+    if isinstance(weights, str):
+        return weights
     r = random.random()
     for (w, i) in zip(weights, itertools.count()):
         if r < w:
@@ -15,12 +18,19 @@ class Option(object):
         self.stop = stop
 
     def apply(self, model):
-        stop = True
+        stop = False
+        reward = 0
         while not stop:
             a = wrandom(self.act(model.state()))
-            model.act(a)
+            # TODO: consider the discount
+            reward += model.act(a)
             stop = random.random() < self.stop(model.state())
+        return reward
 
 class Action(Option):
     def __init__(self, a):
-        super(lambda s: a, lambda s: 1)
+        self.a = a
+        Option.__init__(self, lambda s: a, lambda s: 1)
+
+    def __repr__(self):
+        return self.a

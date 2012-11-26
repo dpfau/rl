@@ -7,9 +7,9 @@ class RandomWalker(object):
         self.options = options
 
     def state(self):
-        return model.state()
+        return self.model.state()
 
     def walk(self):
-        option = random.choice(options)
-        option.apply(model)
-        return model.state()
+        option = random.choice(self.options)
+        reward = option.apply(self.model)
+        return (self.model.state(), reward)
