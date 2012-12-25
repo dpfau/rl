@@ -1,42 +1,44 @@
 
 import numpy as NP
 import networkx as NX
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
 from mdp import *
 from option import *
 from RandomWalker import *
 
-SHORT_WALK = 1000
+SHORT_WALK = 10000
 
 def makeLocalGraph(model, options, walker=None):
     if walker is None:
         walker = RandomWalker(model, options)
     g = NX.DiGraph()
     s = walker.state()
-    print(s)
     g.add_node(s)
     for i in range(SHORT_WALK):
         (t, r) = walker.walk()
         if t not in g:
-            print(t)
             g.add_node(t)
         if g.has_edge(s, t):
-            g[s][t]['weight'] -= r
+            g[s][t]['weight'] -= 1/r
         else:
-            g.add_edge(s, t, weight=1)
+            g.add_edge(s, t, weight=-1/r)
         s = t
     return g
 
 def cluster(g):
-    S = NX.linalg.adjacency_matrix(g)
-##    print(S)
-    # since we're using a DiGraph, make S symmetric
+    W = NP.array(NX.linalg.adjacency_matrix(g, sorted(g.nodes())))
+    # since we're using a DiGraph, make W symmetric
     # but is this the right way to do this?
-    S += S.T
-    d = 1/NP.sqrt(S.sum(axis=1))
-    L = NP.eye(d.shape[0]) - (S*d).T * d
+    W += W.T
+    D = NP.diag(W.sum(axis=1))
+    # Unnormalized:
+##    L = D - W
+    # Normalized asymmetric:
+    L = NP.eye(len(g)) - NP.linalg.inv(D).dot(W)
     (vals, vecs) = NP.linalg.eig(L)
-    vs = sorted(zip(vals, itertools.count(), vecs), reverse=True)
+    vs = sorted(zip(vals, itertools.count(), vecs.T))
     v = vs[1][2]
     return v
 
@@ -45,4 +47,14 @@ def main(args=None):
     actions = [Action(a) for a in model.actions()]
     g = makeLocalGraph(model, actions)
     v = cluster(g)
-    print(v)
+
+    # visualization
+    tab = [[(x, y) in model.walls for y in range(model.w)] for x in range(model.h)]
+    for (node, val) in zip(sorted(g.nodes()), v):
+        tab[node[0]][node[1]] = val#(val * val.conjugate()).real**.5
+    tab += NP.min(tab)
+    tab /= NP.max(tab)
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.imshow(tab, cmap=cm.coolwarm, interpolation='nearest')
+    plt.show()
