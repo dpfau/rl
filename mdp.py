@@ -21,6 +21,7 @@ class MDP(object):
 
 class Grid(MDP):
 	action_set = set(['u','d','l','r'])
+	max_reward = -1
 
 	def __init__(self, h=10, w=10, state=(0,0)):
 		self.h = int(h)
@@ -29,6 +30,9 @@ class Grid(MDP):
 		x, y = self._state
 		assert x >=0 and x < self.h and y >= 0 and y < self.w, 'State is out of allowed range: x = %i y = %i' % self._state
 		self.borders = [self.w*[None], self.h*[None], self.w*[None], self.h*[None]] # N, E, S, W border
+
+	def discount(self):
+		return 0.9
 
 	def new_state(self, action):
 		x, y = self._state
@@ -51,8 +55,8 @@ class Grid(MDP):
 		new_state = self.new_state(action)
 		if new_state is not None:
 			self._state = new_state
-			return -1
-		return -10
+			return (1, -1)
+		return (1, -10)
 
 	@staticmethod
 	def one_way(grid1, grid2, border1, border2):

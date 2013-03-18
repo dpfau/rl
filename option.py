@@ -4,7 +4,8 @@ import itertools
 import collections
 
 def wrandom(weights):
-    if isinstance(weights, str):
+    if not isinstance(weights, collections.Iterable):
+        # deterministic choice
         return weights
     r = random.random()
     for (w, i) in zip(weights, itertools.count()):
@@ -19,18 +20,13 @@ class Option(object):
 
     def apply(self, model):
         stop = False
+        steps = 0
         reward = 0
         while not stop:
             a = wrandom(self.act(model.state()))
             # TODO: consider the discount
-            reward += model.act(a)
+            (_, r) = model.act(a)
+            reward += r * model.discount()**steps
+            steps += 1
             stop = random.random() < self.stop(model.state())
-        return reward
-
-class Action(Option):
-    def __init__(self, a):
-        self.a = a
-        Option.__init__(self, lambda s: a, lambda s: 1)
-
-    def __repr__(self):
-        return self.a
+        return (steps, reward)
