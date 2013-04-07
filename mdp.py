@@ -176,7 +176,36 @@ class Taxi(MDP):
 			raise Error('Not a recognized action')
 
 class Hanoi(MDP):
-	pass
+	''' Tower of Hanoi MDP. The number of discs is given by self.n. The state is a tuple listing the position of the discs, 
+		from lowest to highest, with 0 as the initial peg, 1 as the intermediate peg and 2 as the goal peg. ''' 
+
+	def __init__(self, n=5):
+		self.n = n
+		self._state = tuple(n*[0]) 
+		self.action_set = set([(disc, peg) for disc in range(n) for peg in range(3)])
+
+	def actions(self):
+		return set([(disc,peg) for disc in range(self.n) for peg in range(3) \
+			if self._state[disc] is not peg \
+			and self._state.index(self._state[disc]) is disc \
+			and self._state.index(peg) > disc]) # List comprehension is fucking awesome
+
+	def act(self, action):
+		disc, peg = action
+		if peg > 2 or peg < 0:
+			raise Error('Not a recognized peg!')
+		if disc > self.n-1 or disc < 0:
+			raise Error('Not a recognized disc!')
+		if self._state[disc] is peg:
+			raise Error('Why move where you already are?') # might want to change the rules so this is allowed, like passing a turn
+		if self._state.index(self._state[disc]) is not disc:
+			raise Error('Cannot move: disc is under another disc!')
+		if self._state.index(peg) > disc:
+			raise Error('Cannot move to there: smaller disc is on top!')
+		self._state[disc] = peg
+		if self._state == tuple(2*[self.n]):
+			return 100 # goal state is reached
+		return -1 # you can do something else to set the reward here
 
 class Maze(Grid):
         def __init__(self, h=10, w=10, walls=[], state=(0,0)):
